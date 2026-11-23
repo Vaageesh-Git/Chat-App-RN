@@ -9,7 +9,8 @@ import {
     ActivityIndicator,
     RefreshControl
 } from 'react-native';
-import { API_BASE_URL, AUTH_HEADER } from './config';
+import { API_BASE_URL, AUTH_HEADER, ENABLE_MOCK_FALLBACK } from './config';
+import { getMockConversations } from './mockData';
 
 const ConversationScreen = ({ navigation }) => {
     const [conversations, setConversations] = useState([]);
@@ -17,6 +18,7 @@ const ConversationScreen = ({ navigation }) => {
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [isOfflineMode, setIsOfflineMode] = useState(false);
 
     const fetchConversations = useCallback(async (isRefresh = false) => {
         if (isRefresh) {
@@ -27,12 +29,17 @@ const ConversationScreen = ({ navigation }) => {
         setError(null);
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+
             const response = await fetch(`${API_BASE_URL}/conversation`, {
                 method: 'GET',
                 headers: {
                     'Authorization': AUTH_HEADER
-                }
+                },
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 throw new Error(`Server returned ${response.status}`);
@@ -63,8 +70,15 @@ const ConversationScreen = ({ navigation }) => {
             );
 
             setConversations(populated);
+            setIsOfflineMode(false);
         } catch (err) {
-            setError(err.message || 'Failed to load conversations');
+            console.log('Server unreachable, checking fallback:', err.message);
+            if (ENABLE_MOCK_FALLBACK) {
+                setConversations(getMockConversations());
+                setIsOfflineMode(true);
+            } else {
+                setError(err.message || 'Failed to load conversations');
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -72,8 +86,12 @@ const ConversationScreen = ({ navigation }) => {
     }, []);
 
     useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', () => {
+            fetchConversations();
+        });
         fetchConversations();
-    }, [fetchConversations]);
+        return unsubscribe;
+    }, [navigation, fetchConversations]);
 
     const filteredConversations = conversations.filter(c => {
         const title = (c.name || 'Conversation').toLowerCase();
@@ -88,6 +106,15 @@ const ConversationScreen = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
+            {/* Offline / Demo Mode Banner */}
+            {isOfflineMode && (
+                <View style={styles.offlineBanner}>
+                    <Text style={styles.offlineBannerText}>
+                        ⚡ Demo Mode (Backend host is currently unreachable)
+                    </Text>
+                </View>
+            )}
+
             {/* Search Bar */}
             <View style={styles.searchContainer}>
                 <TextInput
@@ -112,6 +139,9 @@ const ConversationScreen = ({ navigation }) => {
             ) : error ? (
                 <View style={styles.centerContainer}>
                     <Text style={styles.errorText}>⚠️ {error}</Text>
+                    <Text style={styles.errorSubtext}>
+                        Check that your server IP in screens/config.js is reachable from your phone.
+                    </Text>
                     <TouchableOpacity style={styles.retryButton} onPress={() => fetchConversations()}>
                         <Text style={styles.retryButtonText}>Retry</Text>
                     </TouchableOpacity>
@@ -179,6 +209,19 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#F8F9FA'
+    },
+    offlineBanner: {
+        backgroundColor: '#FFF3CD',
+        paddingVertical: 6,
+        paddingHorizontal: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#FFEEBA'
+    },
+    offlineBannerText: {
+        color: '#856404',
+        fontSize: 12,
+        fontWeight: '500',
+        textAlign: 'center'
     },
     searchContainer: {
         flexDirection: 'row',
@@ -274,6 +317,12 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: 15,
         color: '#DC3545',
+        textAlign: 'center',
+        marginBottom: 8
+    },
+    errorSubtext: {
+        fontSize: 13,
+        color: '#6C757D',
         textAlign: 'center',
         marginBottom: 16
     },

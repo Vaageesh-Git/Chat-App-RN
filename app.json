@@ -11,6 +11,7 @@
       "bundleIdentifier": "com.anonymous.chat-app"
     },
     "android": {
+      "package": "com.chatApp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -40,6 +41,12 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "445146c2-7e2a-4b8e-91f3-6221d30eb305"
+      }
+    },
+    "owner": "vaageesh"
   }
 }
